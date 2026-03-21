@@ -1,0 +1,9 @@
+src/
+specs/
+docs/
+reports/
+.claude/
+.env
+tsconfig.json
+*.ts
+!dist/**

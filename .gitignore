@@ -1,0 +1,11 @@
+node_modules/
+dist/
+*.js.map
+.env
+
+# 測試腳本含帳密，不推上去
+src/test.ts
+src/test-mcp.ts
+
+# 測試報告含內部環境資訊
+reports/

@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "backend",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "backend/Tpi.TPAD/Tpi.Lalaleap.csproj"],
+      "port": 7194
+    },
+    {
+      "name": "frontend",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["C:/Users/user/AppData/Roaming/npm/node_modules/pnpm/bin/pnpm.cjs", "--dir", "frontend", "dev"],
+      "port": 5173
+    }
+  ]
+}
