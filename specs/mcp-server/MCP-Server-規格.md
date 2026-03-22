@@ -454,9 +454,123 @@ Claude: 我來幫你建立。
 
 ## 8. 後端需配合事項
 
-| # | 項目 | 說明 |
+| # | 項目 | 狀態 | 說明 |
+|---|------|------|------|
+| 1 | **API Token CRUD** | 已完成 | generate / list / revoke / verify 四個端點 |
+| 2 | **API Token 認證 Middleware** | 已完成 | 所有既有 API 皆可接受 `llp_` Token（2026-03-22 驗證通過） |
+| 3 | **個人設定頁面入口** | 待排 | 前端需在個人設定頁新增「API Token」區塊 |
+| 4 | **CORS（如需 SSE 模式）** | 待排 | 若未來改用 SSE 傳輸，需開放 CORS |
+
+---
+
+### 8.1 API Token 認證 Middleware（已完成）
+
+> **狀態：** 2026-03-22 部署並驗證通過，所有 API 端點皆可使用 `llp_` Token 認證。
+
+#### 驗證結果
+
+| 端點 | Bearer JWT | Bearer llp_* | 驗證日期 |
+|------|-----------|-------------|---------|
+| `/project/list` | 200 | 200 | 2026-03-22 |
+| `/project/{pno}` | 200 | 200 | 2026-03-22 |
+| `/require/list` | 200 | 200 | 2026-03-22 |
+| `/bug/list` | 200 | 200 | 2026-03-22 |
+| `/sprint/list` | 200 | 200 | 2026-03-22 |
+| `/project/member/list` | 200 | 200 | 2026-03-22 |
+| `/todo/board` | 200 | 200 | 2026-03-22 |
+| `/tag/query` | 200 | 200 | 2026-03-22 |
+
+#### 實作摘要
+
+在既有的認證 middleware 中，增加 API Token 的判斷分支，所有 API 端點同時接受 JWT 和 API Token 兩種認證方式。
+
+#### 判斷邏輯（虛擬碼）
+
+```
+function authMiddleware(request):
+    token = extractBearerToken(request)
+
+    if token is null:
+        return 401 "未提供認證資訊"
+
+    if token.startsWith("llp_"):
+        // ─── API Token 認證（新增） ───
+        tokenHash = sha256(token)
+        record = db.api_tokens.findOne({ token_hash: tokenHash })
+
+        if record is null:
+            return 401 "API Token 無效"
+        if record.revoked == true:
+            return 401 "API Token 已被撤銷"
+        if record.expires_at != null AND record.expires_at < now():
+            return 401 "API Token 已過期"
+
+        // 注入使用者身份（與 JWT 認證結果相同的格式）
+        request.userIdentity = {
+            sno: record.sno,
+            email: record.email   // 從 user 表 join 取得
+        }
+
+        // 更新最後使用時間（非同步，不阻塞請求）
+        db.api_tokens.updateOne(
+            { token_hash: tokenHash },
+            { $set: { last_used_at: now() } }
+        )
+
+    else:
+        // ─── 原有的 JWT 認證（不變） ───
+        jwtPayload = verifyJwt(token)
+        request.userIdentity = {
+            sno: jwtPayload.sno,
+            email: jwtPayload.email
+        }
+
+    // 認證通過，繼續後續 handler
+    next()
+```
+
+#### 關鍵要求
+
+| # | 要求 | 說明 |
 |---|------|------|
-| 1 | **API Token 機制** | 新增 token 產生/驗證端點，支援 Bearer token 認證 |
-| 2 | **Token → 使用者對應** | Token middleware 將 token 轉為 sno，注入到現有的使用者身份機制 |
-| 3 | **個人設定頁面入口** | 前端需在個人設定頁新增「API Token」區塊 |
-| 4 | **CORS（如需 SSE 模式）** | 若未來改用 SSE 傳輸，需開放 CORS |
+| 1 | **判斷依據** | Token 以 `llp_` 開頭 → API Token 路徑；否則 → JWT 路徑 |
+| 2 | **身份注入格式一致** | API Token 認證後注入的 `userIdentity` 格式必須與 JWT 認證結果相同，確保下游所有 handler 不需改動 |
+| 3 | **X-UserNo header** | 若原有 API 依賴 `X-UserNo` header 識別使用者，middleware 應在 API Token 認證成功後自動補上此 header（值為 `record.email`），讓下游透明 |
+| 4 | **不改既有端點** | 所有業務 API（`/project/*`、`/require/*`、`/bug/*` 等）不需做任何修改，完全由 middleware 處理 |
+| 5 | **效能考量** | `last_used_at` 更新用非同步 fire-and-forget，不阻塞回應 |
+| 6 | **SHA256 查找** | 使用 `token_hash` 欄位的 unique index 查詢，O(1) |
+
+#### 驗收標準
+
+以下 curl 指令必須都能成功（替換為實際 token）：
+
+```bash
+# 1. 列出專案（目前回 401，修完後應回 200）
+curl -X POST https://{domain}/ap2/lalaleap/project/list \
+  -H "Authorization: Bearer llp_xxxxxxxxx" \
+  -H "Content-Type: application/json"
+
+# 2. 列出需求
+curl -X POST https://{domain}/ap2/lalaleap/require/list \
+  -H "Authorization: Bearer llp_xxxxxxxxx" \
+  -H "Content-Type: application/json" \
+  -H "X-Version: 2" \
+  -d '{"pno": "xxx", "page": 1, "limit": 10}'
+
+# 3. 建立需求
+curl -X POST https://{domain}/ap2/lalaleap/require/add \
+  -H "Authorization: Bearer llp_xxxxxxxxx" \
+  -H "Content-Type: application/json" \
+  -d '{"pno": "xxx"}'
+
+# 4. 原有 JWT 認證不受影響
+curl -X POST https://{domain}/ap2/lalaleap/project/list \
+  -H "Authorization: Bearer eyJhbGciOi..." \
+  -H "Content-Type: application/json"
+```
+
+#### 影響範圍
+
+- **需改動：** 認證 middleware 一處（新增 `llp_` 判斷分支）
+- **不需改動：** 所有 Controller、Service、Repository — 它們只看 `userIdentity`，不關心 token 來源
+- **風險：** 低 — 新增分支不影響既有 JWT 流程，可用 feature flag 控制上線
