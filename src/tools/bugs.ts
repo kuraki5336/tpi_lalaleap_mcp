@@ -103,4 +103,51 @@ export function registerBugTools(server: McpServer, api: ApiClient, guard: Write
       }
     }
   );
+
+  // Tool 15: update_bug (write)
+  server.tool(
+    'update_bug',
+    '更新缺陷欄位（寫入操作，受白名單與頻率限制保護）',
+    {
+      pno: z.string().describe('專案編號'),
+      rno: z.string().describe('缺陷編號'),
+      title: z.string().optional().describe('新標題'),
+      status: z.string().optional().describe('新狀態'),
+      priority: z.string().optional().describe('新優先度：高 / 中 / 低'),
+      serious: z.string().optional().describe('新嚴重程度'),
+      describe: z.string().optional().describe('缺陷描述'),
+    },
+    async ({ pno, rno, title, status, priority, serious, describe }) => {
+      const blocked = guard.check('update_bug', pno);
+      if (blocked) {
+        return { content: [{ type: 'text' as const, text: blocked }], isError: true };
+      }
+
+      try {
+        const editData: any = { pno, rno, flag: 'Y' };
+        if (title !== undefined) editData.title = title;
+        if (status !== undefined) editData.status = status;
+        if (priority !== undefined) editData.priority = priority;
+        if (serious !== undefined) editData.serious = serious;
+        if (describe !== undefined) editData.describe = describe;
+
+        const resp = await api.post('/bug/edit', editData);
+        if (!resp.success) {
+          return { content: [{ type: 'text' as const, text: `更新失敗: ${resp.message}` }] };
+        }
+
+        guard.record('update_bug', pno);
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify({ rno, message: '缺陷已更新' }, null, 2),
+            },
+          ],
+        };
+      } catch (err) {
+        return { content: [{ type: 'text' as const, text: formatError(err) }], isError: true };
+      }
+    }
+  );
 }

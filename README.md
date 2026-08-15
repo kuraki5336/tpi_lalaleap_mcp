@@ -61,7 +61,7 @@ Lalaleap 後端 API（Java）
 
 ```bash
 git clone https://github.com/kuraki5336/tpi_lalaleap_mcp.git
-cd tpi_tpad_mcp && npm install
+cd tpi_lalaleap_mcp && npm install
 ```
 
 然後 MCP 設定改指向本機路徑：
@@ -71,7 +71,7 @@ cd tpi_tpad_mcp && npm install
   "mcpServers": {
     "lalaleap": {
       "command": "node",
-      "args": ["/你的路徑/tpi_tpad_mcp/dist/index.js"],
+      "args": ["/你的路徑/tpi_lalaleap_mcp/dist/index.js"],
       "env": { ... }
     }
   }
@@ -110,7 +110,7 @@ cd tpi_tpad_mcp && npm install
 
 ## 可用 Tools 一覽
 
-共 14 個 tool，AI 會根據你的指令自動選擇呼叫。
+共 15 個 tool，AI 會根據你的指令自動選擇呼叫。
 
 ### 專案
 
@@ -135,6 +135,7 @@ cd tpi_tpad_mcp && npm install
 |------|--------|---------|---------|
 | `create_bug` | 建立缺陷 | `pno`, `title` | `describe`, `priority`(高/中/低), `serious` |
 | `list_bugs` | 查缺陷清單 | `pno` | `page`, `limit` |
+| `update_bug` | 改缺陷 | `pno`, `rno` | `title`, `status`, `priority`, `serious`, `describe` |
 
 ### 待辦 / 迭代 / 其他
 

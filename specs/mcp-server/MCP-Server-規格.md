@@ -315,6 +315,26 @@ Lalaleap 後端 API (Java)
 
 ---
 
+#### Tool 15: `update_bug`
+
+> 更新缺陷欄位（標題、狀態、優先度、嚴重程度等）
+
+**Parameters：**
+
+| 參數 | 型別 | 必填 | 說明 |
+|------|------|------|------|
+| pno | string | 是 | 專案編號 |
+| rno | string | 是 | 缺陷編號 |
+| title | string | 否 | 新標題 |
+| status | string | 否 | 新狀態 |
+| priority | string | 否 | 新優先度：`高` / `中` / `低` |
+| serious | string | 否 | 新嚴重程度 |
+| describe | string | 否 | 缺陷描述 |
+
+**對應 API：** `POST /bug/edit`
+
+---
+
 ### P2：進階 Tools
 
 #### Tool 12: `list_project_members`

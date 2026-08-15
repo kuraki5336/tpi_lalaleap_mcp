@@ -16,7 +16,7 @@
 | 項目 | 說明 |
 |------|------|
 | API 伺服器 | https://your-domain.com/ap2/lalaleap |
-| 測試帳號 | kuraki5336@gmail.com |
+| 測試帳號 | （由 .env 提供，不記錄於文件） |
 | SSL 設定 | LALALEAP_UNSAFE_SSL=1（開發環境憑證過期） |
 | MCP SDK 版本 | @modelcontextprotocol/sdk v1.27.1 |
 | Node.js 執行方式 | npx tsx (tsx v4.21.0) |

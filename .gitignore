@@ -3,9 +3,10 @@ dist/
 *.js.map
 .env
 
-# 測試腳本含帳密，不推上去
+# 測試腳本含帳密，不推上去（repo 為 public，務必維持忽略）
 src/test.ts
 src/test-mcp.ts
+src/test-npx.ts
 
 # 測試報告含內部環境資訊
 reports/
