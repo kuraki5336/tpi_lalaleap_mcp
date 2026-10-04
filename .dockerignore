@@ -1,0 +1,13 @@
+node_modules
+dist
+.git
+.env
+.claude
+reports
+docs
+specs
+*.md
+!README.md
+src/test.ts
+src/test-mcp.ts
+src/test-npx.ts

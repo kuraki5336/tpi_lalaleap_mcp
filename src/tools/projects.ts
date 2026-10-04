@@ -4,7 +4,7 @@ import type { ApiClient } from '../api-client.js';
 import { formatError } from '../api-client.js';
 import type { WriteGuard } from '../write-guard.js';
 
-export function registerProjectTools(server: McpServer, api: ApiClient, guard: WriteGuard) {
+export function registerListProjectsTool(server: McpServer, api: ApiClient) {
   // Tool 1: list_projects (read)
   server.tool(
     'list_projects',
@@ -28,6 +28,10 @@ export function registerProjectTools(server: McpServer, api: ApiClient, guard: W
       }
     }
   );
+}
+
+export function registerProjectTools(server: McpServer, api: ApiClient, guard: WriteGuard) {
+  registerListProjectsTool(server, api);
 
   // Tool 2: get_project_detail (read)
   server.tool(

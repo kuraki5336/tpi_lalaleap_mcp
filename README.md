@@ -24,7 +24,27 @@ Lalaleap 後端 API（Java）
 
 ---
 
-## 快速上手（3 分鐘）
+## 兩種使用方式
+
+| 方式 | 適合 | 傳輸 | 認證 |
+|------|------|------|------|
+| **遠端（HTTP＋OAuth，推薦）** | 一般使用者：不裝套件、不設環境變數 | Streamable HTTP（stateless） | OAuth 2.1（PKCE、CIMD／DCR），登入 Lalaleap 後同意授權 |
+| **本機（stdio）** | 離線、需自行控管設定 | stdio | `llp_` API Token 或帳密 |
+
+使用者端只要一行（網址以實際部署為準）：
+
+```bash
+claude mcp add --transport http lalaleap https://mcp.lalaleap.twkuraki.com/mcp
+# 進 Claude Code → /mcp → 選 lalaleap → Authenticate → 瀏覽器登入並同意
+```
+
+VS Code（`.vscode/mcp.json`）：`{ "servers": { "lalaleap": { "type": "http", "url": "https://mcp.lalaleap.twkuraki.com/mcp" } } }`；Cursor（`~/.cursor/mcp.json`）：`{ "mcpServers": { "lalaleap": { "url": "https://mcp.lalaleap.twkuraki.com/mcp" } } }`。這兩者走 DCR 註冊。使用者可在 Lalaleap「個人設定 → 已授權應用程式」撤銷。
+
+伺服器端部署（環境變數、反向代理）見下方「[HTTP 模式（遠端部署）](#http-模式遠端部署)」。
+
+---
+
+## 快速上手：本機 stdio（3 分鐘）
 
 ### Step 1：設定你的 AI 工具
 
@@ -147,6 +167,97 @@ cd tpi_lalaleap_mcp && npm install
 | `list_project_members` | 查專案成員 | `pno` | — |
 | `search_tags` | 搜尋標籤 | `pno` | `keyword` |
 
+### 規格審查工具（`spec_review`）
+
+HTTP 模式 24 個工具（上列 15 個＋下列 9 個）、stdio 模式 23 個（上列 15 個＋下列 8 個）。需要 `spec_review` scope（HTTP）與 AiZone 網域帳號；寫入類工具同受 WriteGuard 限制。
+
+| Tool | 做什麼 | HTTP | stdio |
+|------|--------|:----:|:-----:|
+| `list_my_spec_tasks` | 我的規格審查待辦 | v | v |
+| `get_spec_case` | 案件詳情、各角色交件狀態 | v | v |
+| `get_spec_report` | 審查報告（可 `onlyMine`、`format=markdown`） | v | v |
+| `pull_spec_materials` | 取料：取得其他角色最新版材料（HTTP 回一次性下載網址，stdio 直接下載到本機） | v | v |
+| `read_spec_material` | 讀取某份材料文字 | v | v |
+| `request_spec_upload` | 交件第 1 步：取得一次性上傳網址（10 分鐘，由客戶端 `curl` 上傳） | v | — |
+| `upload_spec_text` | 無 shell 時以純文字上傳材料 | v | — |
+| `upload_spec_material` | 從本機路徑上傳材料 | — | v |
+| `submit_spec` | 交件 | v | v |
+| `mark_spec_not_applicable` | 標記角色不適用 | v | v |
+
+搭配的統一 skill（`/待辦`、`/取料`、`/交件`、`/修正`）由各角色自行安裝，不在本套件內。
+
+### Scope 對照（HTTP 模式）
+
+| Scope | 可用工具 |
+|-------|----------|
+| `lalaleap.read` | 既有 9 個唯讀工具（`list_projects`、`get_project_detail`、`list_project_members`、`list_requirements`、`get_requirement_detail`、`list_bugs`、`list_sprints`、`search_tags`、`list_todos`）與 5 個 resources（一律包含）|
+| `lalaleap.write`（隱含 read） | 既有 6 個寫入工具（`create_project`、`create_requirement`、`update_requirement`、`create_bug`、`update_bug`、`create_todo`）|
+| `spec_review` | 規格審查 9 個工具（不隱含 read／write；寫入類另受 WriteGuard 限制）|
+
+scope 不足時回 HTTP 403 `insufficient_scope`，客戶端會引導重新授權。
+
+---
+
+## HTTP 模式（遠端部署）
+
+HTTP 模式是 OAuth 2.1 的 **Resource Server**：授權伺服器在 Lalaleap 後端（.NET），本程式只驗證 access token（introspection）、再以 Token Exchange 換成短效委派 token 呼叫後端 API。不轉送使用者的 token、不保存使用者資料，無狀態（不發 `Mcp-Session-Id`），可水平擴充。
+
+### 啟動
+
+```bash
+npm ci && npm run build
+LALALEAP_TRANSPORT=http node dist/index.js      # 或：node dist/index.js --transport http
+```
+
+或用 Docker（非 root、只含 production 依賴、內建 `HEALTHCHECK /healthz`）：
+
+```bash
+docker build -t lalaleap-mcp:1.2.0 .
+docker run -d --name lalaleap-mcp -p 3000:3000 --env-file mcp.env lalaleap-mcp:1.2.0
+```
+
+> HTTP 模式不讀 `LALALEAP_API_TOKEN`／`LALALEAP_EMAIL`／`LALALEAP_PASSWORD`（設了會印警告並忽略），也拒收 `llp_` token。
+
+### 環境變數（HTTP 模式）
+
+| 變數 | 必填 | 預設 | 說明 |
+|------|:----:|------|------|
+| `LALALEAP_TRANSPORT` | 是（或 `--transport http`） | `stdio` | 設為 `http` 啟用本模式 |
+| `MCP_PUBLIC_URL` | 是 | — | 對外 canonical 網址，**含路徑**，例：`https://mcp.lalaleap.twkuraki.com/mcp`。同時是 PRM 的 `resource` 與 token `aud` 比對值，必須與後端 `OAuth:McpResource` 一致（比對時 scheme／host 不分大小寫、忽略尾斜線）|
+| `OAUTH_ISSUER` | 是 | — | 授權伺服器 issuer，例：`https://lalaleap.twkuraki.com/ap2/lalaleap/oauth`，必須與後端 `OAuth:Issuer` 逐字一致 |
+| `LALALEAP_API_URL` | 是 | — | 後端 REST 基底網址，例：`https://lalaleap.twkuraki.com/ap2/lalaleap`（Node 從容器能連到的位址）|
+| `MCP_ALLOWED_HOSTS` | 是 | — | 逗號分隔，允許的 `Host` header（DNS rebinding 防護），例：`mcp.lalaleap.twkuraki.com` |
+| `OAUTH_RS_CLIENT_ID` | 是 | — | 本 RS 在授權伺服器的 client id，預設值 `lalaleap-mcp-rs`（對應後端 `OAuth:RsClientId`）|
+| `OAUTH_RS_CLIENT_SECRET` | 是 | — | RS client 的**明文** secret；後端只存其 SHA-256（`OAuth__RsClientSecretHash`）。走 docker secrets／環境變數，不進 repo |
+| `PORT` | 否 | `3000` | 監聽埠（綁 `0.0.0.0`）|
+| `OAUTH_INTROSPECT_URL` | 否 | `${OAUTH_ISSUER}/introspect` | 一般不用設 |
+| `OAUTH_TOKEN_URL` | 否 | `${OAUTH_ISSUER}/token` | 一般不用設 |
+| `LALALEAP_API_RESOURCE` | 否 | 同 `LALALEAP_API_URL` | Token Exchange 的 `resource`（委派 token audience），必須與後端 `OAuth:ApiResource` 一致。**若 `LALALEAP_API_URL` 用內網位址，這個一定要設成對外網址** |
+| `MCP_ALLOWED_ORIGINS` | 否 | 空 | 逗號分隔，允許的 `Origin`。`/mcp` 不開瀏覽器 CORS，通常留空 |
+| `MCP_TRUST_PROXY` | 否 | 不啟用 | 前面有幾層反向代理（整數，Express `trust proxy`）。**在 nginx 後面請設 `1`**，否則 `/mcp` 的 300 次／分速率限制會全部算在代理 IP |
+| `LALALEAP_READONLY` | 否 | — | `1` ＝ 全站唯讀（所有寫入工具被擋）|
+| `LALALEAP_ALLOWED_PROJECTS` | 否 | — | 專案白名單（逗號分隔 pno），寫入限這些專案 |
+| `LALALEAP_WRITE_RATE_LIMIT` | 否 | `10` | 每位使用者每分鐘最大寫入次數（HTTP 模式依使用者獨立計算）|
+
+缺少必填變數時程式啟動即失敗並指出變數名稱。
+
+### 端點
+
+| 路徑 | 說明 |
+|------|------|
+| `POST {MCP_PUBLIC_URL 的路徑}`（`/mcp`）| MCP Streamable HTTP（stateless，回 JSON）；GET／DELETE 回 405 |
+| `GET /.well-known/oauth-protected-resource/mcp`（及根目錄備援）| Protected Resource Metadata（RFC 9728）|
+| `GET /healthz` | 存活檢查，回 `{"status":"ok"}`（不驗 Host、不打授權伺服器）|
+
+### 反向代理需求
+
+- **HTTPS**：對外必須 HTTPS（OAuth 規格強制）；憑證涵蓋 MCP 子網域。
+- **串流不緩衝**：`proxy_buffering off`、`proxy_http_version 1.1`、`proxy_read_timeout` ≥ 120 秒。
+- **轉送標頭**：`Host`（必須落在 `MCP_ALLOWED_HOSTS`）、`X-Forwarded-For`、`X-Forwarded-Proto`；並設定 `MCP_TRUST_PROXY=1`。
+- **路由**：`/mcp` 與 `/.well-known/oauth-protected-resource*` 都要導到本程式。
+- **access log**：規格審查的檔案票券在 query（`?t=`）。MCP 本身不會收到票券網址，但同一個閘道若同時代理後端 `/spec-case/ticket/*`，需遮罩 `t=`。
+- 完整 nginx 範例、上線檢查清單與回滾步驟：見前端 repo `docs/specs/mcp_oauth/DEPLOY.md`。
+
 ---
 
 ## MCP Resources
@@ -198,7 +309,9 @@ AI：→ create_todo(pno, title="寫 API 文件", due_date="2026-03-28")
 ```
 tpi_tpad_mcp/
 ├── src/
-│   ├── index.ts            # 入口：啟動 MCP Server、註冊 tools & resources
+│   ├── index.ts            # 入口：依 transport 啟動 stdio 或 HTTP、註冊 tools & resources
+│   ├── http.ts             # HTTP 模式：Express＋Streamable HTTP、PRM、Bearer 驗證、scope 閘
+│   ├── auth/               # introspection 驗證、委派 token（Token Exchange）、scope 閘、TTL 快取
 │   ├── config.ts           # 讀取環境變數
 │   ├── api-client.ts       # axios HTTP client，處理登入/token/重試
 │   ├── resources.ts        # 5 個 MCP Resources 定義
@@ -210,6 +323,7 @@ tpi_tpad_mcp/
 │       ├── bugs.ts         # create_bug, list_bugs
 │       ├── todos.ts        # create_todo, list_todos
 │       ├── sprints.ts      # list_sprints
+│       ├── spec-review.ts  # 規格審查 9（HTTP）／8（stdio）個工具
 │       ├── tags.ts         # search_tags
 │       └── members.ts      # list_project_members
 ├── docs/
@@ -347,6 +461,11 @@ server.tool(
 | `certificate has expired` | 設定 `LALALEAP_UNSAFE_SSL=1` |
 | `Need to change password (601)` | 已自動處理（server 會用 `keepCipher='Y'` 重試） |
 | `LALALEAP_API_URL 環境變數未設定` | 確認 MCP client 設定中的 `env` 區塊有帶 |
+| （HTTP）啟動說明 `XXX 環境變數未設定（HTTP 模式必填）` | 補上該變數，見「HTTP 模式」環境變數表 |
+| （HTTP）所有請求 401，`aud` 不符 | `MCP_PUBLIC_URL` 與後端 `OAuth:McpResource` 不一致 |
+| （HTTP）token exchange 失敗／後端 401 | `LALALEAP_API_RESOURCE`（預設＝`LALALEAP_API_URL`）與後端 `OAuth:ApiResource` 不一致，或 RS secret 與後端雜湊不符 |
+| （HTTP）403 `Invalid Host` | 反代沒轉送正確 `Host`，或 `MCP_ALLOWED_HOSTS` 沒列該網域 |
+| （HTTP）回應被切斷／延遲 | 反代沒關緩衝（`proxy_buffering off`）或讀取逾時太短 |
 | 連不上 server | 確認 `npm run build` 過了，`dist/index.js` 存在 |
 | tool 沒出現 | 重啟 AI 工具，確認 settings.json 格式正確 |
 
@@ -361,7 +480,8 @@ server.tool(
 | MCP SDK | @modelcontextprotocol/sdk 1.27 |
 | HTTP Client | axios 1.13 |
 | Schema Validation | zod 4.3 |
-| 傳輸方式 | stdio（標準輸入輸出） |
+| 傳輸方式 | stdio（標準輸入輸出）；Streamable HTTP（stateless，Express 5）＋OAuth 2.1 Resource Server |
+| Docker | `node:20-alpine`，HTTP 模式見 `Dockerfile` |
 
 ---
 

@@ -18,15 +18,26 @@ interface LoginResponse {
   email: string;
 }
 
+/** 取得呼叫後端 API 用的 Bearer token（stdio 以外的模式使用）*/
+export interface TokenProvider {
+  getToken(): Promise<string>;
+  /** 後端回 401 時呼叫；回傳 true 表示已丟棄舊 token，可重試一次 */
+  onUnauthorized(): Promise<boolean>;
+}
+
+export const AUTH_EXPIRED_MESSAGE = '授權已失效，請在 /mcp 重新認證';
+
 export class ApiClient {
   private client: AxiosInstance;
   private token: string | null = null;
   private refreshToken: string | null = null;
   private userEmail: string | null = null;
   private config: Config;
+  private tokenProvider?: TokenProvider;
 
-  constructor(config: Config) {
+  constructor(config: Config, tokenProvider?: TokenProvider) {
     this.config = config;
+    this.tokenProvider = tokenProvider;
     this.client = axios.create({
       baseURL: config.apiUrl,
       timeout: 30000,
@@ -37,7 +48,12 @@ export class ApiClient {
     });
 
     // Request interceptor: attach auth headers
-    this.client.interceptors.request.use((reqConfig) => {
+    this.client.interceptors.request.use(async (reqConfig) => {
+      if (this.tokenProvider) {
+        // provider 模式（HTTP/OAuth）：只送委派 token，不送 X-UserNo
+        reqConfig.headers.Authorization = `Bearer ${await this.tokenProvider.getToken()}`;
+        return reqConfig;
+      }
       if (this.token) {
         reqConfig.headers.Authorization = `Bearer ${this.token}`;
       }
@@ -49,6 +65,7 @@ export class ApiClient {
   }
 
   async initialize(): Promise<void> {
+    if (this.tokenProvider) return;
     if (this.config.apiToken) {
       // Use API Token directly
       this.token = this.config.apiToken;
@@ -113,12 +130,13 @@ export class ApiClient {
     method: 'GET' | 'POST',
     path: string,
     data?: any,
-    headers?: Record<string, string>
+    headers?: Record<string, string>,
+    responseType?: 'arraybuffer'
   ): Promise<ApiResponse<T>> {
     const doRequest = async (): Promise<ApiResponse<T>> => {
       const resp =
         method === 'GET'
-          ? await this.client.get<ApiResponse<T>>(path, { headers })
+          ? await this.client.get<ApiResponse<T>>(path, { headers, ...(responseType ? { responseType } : {}) })
           : await this.client.post<ApiResponse<T>>(path, data, { headers });
       return resp.data;
     };
@@ -127,6 +145,17 @@ export class ApiClient {
       return await doRequest();
     } catch (err) {
       const axiosErr = err as AxiosError<ApiResponse>;
+      if (axiosErr.response?.status === 401 && this.tokenProvider) {
+        if (await this.tokenProvider.onUnauthorized()) {
+          try {
+            return await doRequest();
+          } catch (err2) {
+            if ((err2 as AxiosError).response?.status === 401) throw new Error(AUTH_EXPIRED_MESSAGE);
+            throw err2;
+          }
+        }
+        throw new Error(AUTH_EXPIRED_MESSAGE);
+      }
       if (axiosErr.response?.status === 401) {
         const refreshed = await this.tryRefreshToken();
         if (refreshed) {
@@ -140,6 +169,12 @@ export class ApiClient {
       }
       throw err;
     }
+  }
+
+  /** 下載二進位內容（如 zip）；失敗仍丟 AxiosError（含 401 重試）*/
+  async getBinary(path: string): Promise<Buffer> {
+    const data = (await this.request('GET', path, undefined, undefined, 'arraybuffer')) as unknown as ArrayBuffer;
+    return Buffer.from(data);
   }
 
   async get<T = any>(path: string): Promise<ApiResponse<T>> {
