@@ -2,7 +2,7 @@
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { loadConfig, loadHttpConfig, isHttpTransport } from './config.js';
+import { loadConfig, isHttpTransport } from './config.js';
 import { ApiClient } from './api-client.js';
 import { WriteGuard } from './write-guard.js';
 import { registerProjectTools } from './tools/projects.js';
@@ -17,13 +17,17 @@ import { registerResources } from './resources.js';
 
 async function main() {
   if (isHttpTransport()) {
-    // HTTP（OAuth Resource Server）模式：忽略 llp_／帳密設定
-    for (const k of ['LALALEAP_API_TOKEN', 'LALALEAP_EMAIL', 'LALALEAP_PASSWORD']) {
-      if (process.env[k]) console.error(`[mcp] 警告：HTTP 模式忽略 ${k}`);
-    }
-    const { startHttpServer } = await import('./http.js');
-    await startHttpServer(loadHttpConfig());
-    return;
+    // 1.3.0 起 HTTP（OAuth Resource Server）模式停用：遠端 MCP 改由 Lalaleap 後端（.NET）內建提供，不需要獨立服務。
+    // 原始碼（http.ts 等）保留，不再由入口啟動。
+    console.error(
+      [
+        '[mcp] HTTP 模式已停用（lalaleap-mcp-server 1.3.0 起）。',
+        '遠端 MCP 現在由 Lalaleap 後端直接提供，不需要啟動本程式、也不需要另外部署：',
+        '  claude mcp add --transport http lalaleap https://lalaleap.twkuraki.com/ap2/lalaleap/mcp',
+        '本機 stdio 模式（npx lalaleap-mcp-server ＋ LALALEAP_API_TOKEN）仍可使用，移除 --transport http／LALALEAP_TRANSPORT=http 即可。',
+      ].join(String.fromCharCode(10))
+    );
+    process.exit(2);
   }
 
   const config = loadConfig();
@@ -35,7 +39,7 @@ async function main() {
 
   const server = new McpServer({
     name: 'lalaleap',
-    version: '1.2.0',
+    version: '1.3.0',
   });
 
   // Register all tools

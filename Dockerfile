@@ -1,3 +1,6 @@
+# ⚠️ 已停用（1.3.0）：HTTP 模式由 Lalaleap 後端（.NET）內建提供，不再需要部署本容器。
+# 以此映像啟動（LALALEAP_TRANSPORT=http）會印出停用訊息並以非 0 結束。保留檔案僅供參考。
+#
 # Lalaleap MCP Server — HTTP（OAuth Resource Server）模式
 #
 # build:  docker build -t lalaleap-mcp:1.2.0 .

@@ -367,6 +367,29 @@ test('verifier：快取 TTL = min(60s, exp-now)，到期後重新 introspect', a
 
 // ───────────── stdio 模式不受影響 ─────────────
 
+// ───────────── HTTP 模式已停用（1.3.0）：遠端 MCP 改由 .NET 後端內建提供 ─────────────
+
+for (const how of ['環境變數 LALALEAP_TRANSPORT=http', '參數 --transport http']) {
+  test(`HTTP 模式已停用：${how} 啟動時印明確訊息並以非 0 結束，不監聽任何埠`, async () => {
+    const args = ['--import', 'tsx/esm', 'src/index.ts', ...(how.startsWith('參數') ? ['--transport', 'http'] : [])];
+    const child = spawn(process.execPath, args, {
+      env: {
+        PATH: process.env.PATH,
+        SystemRoot: process.env.SystemRoot,
+        ...(how.startsWith('環境') ? { LALALEAP_TRANSPORT: 'http' } : {}),
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let err = '';
+    child.stderr.on('data', (d) => (err += d));
+    const code: number | null = await new Promise((resolve) => child.on('exit', (c) => resolve(c)));
+    assert.notEqual(code, 0, 'HTTP 模式必須以非 0 結束');
+    assert.match(err, /HTTP 模式已停用/);
+    assert.match(err, /https:\/\/lalaleap\.twkuraki\.com\/ap2\/lalaleap\/mcp/, '訊息要指向新的遠端網址');
+    assert.match(err, /stdio/, '訊息要提到仍可用 stdio 本機模式');
+  });
+}
+
 test('stdio 模式（預設）：啟動並列出 23 個工具（既有 15＋規格審查 8）；不需要 HTTP 環境變數', async () => {
   const child = spawn(process.execPath, ['--import', 'tsx/esm', 'src/index.ts'], {
     env: {
