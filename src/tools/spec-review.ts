@@ -530,15 +530,15 @@ export function registerSpecReviewTools(server: McpServer, api: ApiClient, guard
 
   if (!stdio) server.tool(
     'request_spec_upload',
-    '交件第 1 步：申請一次性上傳連結。回傳可直接執行的 curl 指令範本（遠端 MCP 讀不到你的本機檔案，請由 shell 執行 curl 上傳）；連結 10 分鐘內有效且只能用一次。上傳後要呼叫 submit_spec 才算交件。任何案件成員可替任何角色上傳；UX 的 append 模式只能追加截圖。',
+    '交件第 1 步：申請一次性上傳連結。回傳可直接執行的 curl 指令範本（遠端 MCP 讀不到你的本機檔案，請由 shell 執行 curl 上傳）；連結 10 分鐘內有效且只能用一次。上傳後要呼叫 submit_spec 才算交件。任何案件成員可替任何角色上傳。mode：預設 append：新檔名加入、同名覆蓋該份、其餘保留；SA／SD 一個章節可分成多份文件分次追加；replace＝取代該角色全部檔案。',
     {
       caseId: caseIdArg,
       role: z.enum(ROLES).describe('要上傳的角色：SA／SD（.md）或 UX（截圖）'),
-      mode: z.enum(['replace', 'append']).optional().describe('預設 replace（取代該角色全部檔案）；append 僅 UX'),
+      mode: z.enum(['replace', 'append']).optional().describe('預設 append：新檔名加入、同名覆蓋該份、其餘保留；SA／SD 一個章節可分成多份文件分次追加；replace＝取代該角色全部檔案'),
     },
     ({ caseId, role, mode }) =>
       guarded('request_spec_upload', caseId, async (pno) => {
-        const resp = await api.post<UploadTicket>('/spec-case/mcp/upload-ticket', { caseId, role, mode: mode ?? 'replace' });
+        const resp = await api.post<UploadTicket>('/spec-case/mcp/upload-ticket', { caseId, role, mode: mode ?? 'append' });
         if (!resp.success) return fail(resp.message || '申請上傳連結失敗');
         let caseCode: string | undefined;
         try {
@@ -557,17 +557,18 @@ export function registerSpecReviewTools(server: McpServer, api: ApiClient, guard
 
   if (!stdio) server.tool(
     'upload_spec_text',
-    '純文字上傳 SA／SD 的 .md（無 shell 的客戶端備援）。注意：優先使用 request_spec_upload＋curl——用本工具必須把整份文件內容再輸出一次，耗 token 且可能改寫內容。每檔 ≤ 512 KB、合計 ≤ 1 MB（檔案數量不限），只收 .md。上傳後要呼叫 submit_spec 才算交件。',
+    '純文字上傳 SA／SD 的 .md（無 shell 的客戶端備援）。注意：優先使用 request_spec_upload＋curl——用本工具必須把整份文件內容再輸出一次，耗 token 且可能改寫內容。每檔 ≤ 512 KB、合計 ≤ 1 MB（檔案數量不限），只收 .md。上傳後要呼叫 submit_spec 才算交件。mode：預設 append：新檔名加入、同名覆蓋該份、其餘保留；SA／SD 一個章節可分成多份文件分次追加；replace＝取代該角色全部檔案。',
     {
       caseId: caseIdArg,
       role: z.enum(TEXT_ROLES).describe('SA 或 SD'),
       files: z.array(z.object({ name: z.string().describe('檔名，須以 .md 結尾'), content: z.string().describe('UTF-8 文字內容') })).describe('至少 1 個檔案（數量不限）'),
+      mode: z.enum(['replace', 'append']).optional().describe('預設 append：新檔名加入、同名覆蓋該份、其餘保留；SA／SD 一個章節可分成多份文件分次追加；replace＝取代該角色全部檔案'),
     },
-    ({ caseId, role, files }) =>
+    ({ caseId, role, files, mode }) =>
       guarded('upload_spec_text', caseId, async (pno) => {
         const bad = validateTextFiles(files);
         if (bad) return fail(bad);
-        const resp = await api.post('/spec-case/mcp/upload-text', { caseId, role, files });
+        const resp = await api.post('/spec-case/mcp/upload-text', { caseId, role, files, mode: mode ?? 'append' });
         if (!resp.success) return fail(resp.message || '上傳失敗');
         guard.record('upload_spec_text', pno);
         return ok({ ...slimUploadResult(resp.data), next: '已上傳，請呼叫 submit_spec 交件。' });
@@ -608,19 +609,19 @@ export function registerSpecStdioTools(server: McpServer, api: ApiClient, guard:
   const guarded = makeGuarded(api, guard);
   server.tool(
     'upload_spec_material',
-    '（本機模式）把本機檔案直接上傳為規格審查材料（不交件）。SA／SD 收 .md；UX 收 png／jpg／jpeg／webp。mode=replace 取代該角色全部檔案，append 僅 UX。上傳只是收件，上傳後請呼叫 submit_spec 才算交件。',
+    '（本機模式）把本機檔案直接上傳為規格審查材料（不交件）。SA／SD 收 .md；UX 收 png／jpg／jpeg／webp。mode：預設 append：新檔名加入、同名覆蓋該份、其餘保留；SA／SD 一個章節可分成多份文件分次追加；replace＝取代該角色全部檔案。上傳只是收件，上傳後請呼叫 submit_spec 才算交件。',
     {
       caseId: caseIdArg,
       role: z.enum(ROLES).describe('SA／SD／UX'),
       paths: z.array(z.string()).min(1).describe('本機檔案路徑（相對路徑以 MCP 執行目錄為基準）'),
-      mode: z.enum(['replace', 'append']).optional().describe('預設 replace；append 僅 UX'),
+      mode: z.enum(['replace', 'append']).optional().describe('預設 append：新檔名加入、同名覆蓋該份、其餘保留；SA／SD 一個章節可分成多份文件分次追加；replace＝取代該角色全部檔案'),
     },
     async ({ caseId, role, paths, mode }) => {
       return guarded('upload_spec_material', caseId, async (pno) => {
         const form = new FormData();
         form.append('caseId', String(caseId));
         form.append('role', role);
-        form.append('mode', mode ?? 'replace');
+        form.append('mode', mode ?? 'append');
         for (const p of paths) {
           const abs = resolve(p);
           let st;

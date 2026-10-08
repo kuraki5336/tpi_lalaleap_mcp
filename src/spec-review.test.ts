@@ -374,14 +374,14 @@ test('read_spec_material：role=UX 被 schema 拒絕（只收 SA／SD）', async
 
 // ───────────── 寫入工具 ─────────────
 
-test('request_spec_upload：回傳完整 curl 範本、有效期、副檔名；預設 mode=replace', async () => {
+test('request_spec_upload：回傳完整 curl 範本、有效期、副檔名；未帶 mode 送 append', async () => {
   const exp = new Date(Date.now() + 600_000).toISOString();
   routes['POST /spec-case/mcp/upload-ticket'] = () => okResp({
     uploadUrl: 'https://x.test/ap2/lalaleap/spec-case/ticket/upload?t=llo_ft_up', expiresAt: exp, maxFiles: null, allowedExtensions: ['.md'], maxFileSizeMb: 50,
   });
   routes['GET /spec-case/detail'] = () => okResp(DETAIL);
   const j = (await tool(tok('E1', SPEC), 'request_spec_upload', { caseId: 12, role: 'SA' })).json();
-  assert.deepEqual(JSON.parse(calls[0].body.toString()), { caseId: 12, role: 'SA', mode: 'replace' });
+  assert.deepEqual(JSON.parse(calls[0].body.toString()), { caseId: 12, role: 'SA', mode: 'append' });
   assert.equal(j.curlCommand, 'curl -fS -X POST -F "files=@./docs/F.2.8.md" "https://x.test/ap2/lalaleap/spec-case/ticket/upload?t=llo_ft_up"');
   assert.equal(j.uploadUrl, 'https://x.test/ap2/lalaleap/spec-case/ticket/upload?t=llo_ft_up');
   assert.equal(j.maxFiles, null);
@@ -451,9 +451,13 @@ test('upload_spec_text：成功 -> 轉送 body、提示 submit_spec；前置驗�
   routes['POST /spec-case/mcp/upload-text'] = () => okResp({ role: 'SA', versionNo: 0, status: 'writing', caseStatus: 'collect' });
   const files = [{ name: 'F.2.8.md', content: '# 中文\n內容' }];
   const j = (await tool(tok('F1', SPEC), 'upload_spec_text', { caseId: 12, role: 'SA', files })).json();
-  assert.deepEqual(JSON.parse(calls[0].body.toString()), { caseId: 12, role: 'SA', files });
+  assert.deepEqual(JSON.parse(calls[0].body.toString()), { caseId: 12, role: 'SA', files, mode: 'append' }, '未帶 mode 一律送 append');
   assert.equal(j.status, 'writing');
   assert.match(j.next, /submit_spec/);
+
+  calls = [];
+  await tool(tok('F1', SPEC), 'upload_spec_text', { caseId: 12, role: 'SA', files, mode: 'replace' });
+  assert.equal(JSON.parse(calls[0].body.toString()).mode, 'replace', '帶 replace 就送 replace');
 
   calls = [];
   for (const [f, re] of [
@@ -557,7 +561,7 @@ test('stdio upload_spec_material：讀本機檔案以 multipart 上傳到 spec-c
   const body = c.body.toString('utf8');
   assert.match(body, /name="caseId"\r\n\r\n12/);
   assert.match(body, /name="role"\r\n\r\nSA/);
-  assert.match(body, /name="mode"\r\n\r\nreplace/);
+  assert.match(body, /name="mode"\r\n\r\nappend/);
   assert.equal((body.match(/name="files"; filename=/g) ?? []).length, 2);
   assert.ok(body.includes('# 主文件\n中文'));
   assert.ok(body.includes('F.2.8.md') && body.includes('補充.md'));
