@@ -39,7 +39,7 @@ async function main() {
 
   const server = new McpServer({
     name: 'lalaleap',
-    version: '1.3.0',
+    version: '1.4.0',
   });
 
   // Register all tools
