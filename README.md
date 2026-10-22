@@ -1,5 +1,32 @@
 # Lalaleap MCP Server
 
+> ## ⚠️ 本專案已停用（2026-10-22）
+>
+> Node 版 MCP Server 已不再維護，也不會再更新，部分工具（例如規格審查的上傳類工具）已無法使用。
+> 請改用 **Lalaleap 內建的遠端 MCP（OAuth 授權）**，不需要安裝任何套件：
+>
+> ```bash
+> claude mcp add --transport http lalaleap https://lalaleap.twkuraki.com/ap2/lalaleap/mcp
+> ```
+>
+> 或在 MCP 設定檔中加入：
+>
+> ```json
+> {
+>   "mcpServers": {
+>     "lalaleap": {
+>       "type": "http",
+>       "url": "https://lalaleap.twkuraki.com/ap2/lalaleap/mcp"
+>     }
+>   }
+> }
+> ```
+>
+> 第一次連線會開啟瀏覽器到 Lalaleap 授權頁，同意後即可使用；claude.ai 連接器也可以填同一個網址。
+> 詳細說明請看 Lalaleap 站內「說明 → MCP」頁。以下內容僅保留作為歷史參考。
+
+---
+
 透過 [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) 讓 AI 工具直接操作 Lalaleap 專案管理系統。
 
 接上之後，你可以用自然語言請 AI 幫你建需求、查缺陷、管理待辦 — 不需要切到瀏覽器。
